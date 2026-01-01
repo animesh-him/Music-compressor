@@ -21,7 +21,7 @@ button:disabled{opacity:.5}
 <div class="container">
 <h2>MP3 Compressor</h2>
 <input id="fileInput" type="file" accept=".mp3,audio/mpeg" multiple />
-<button id="compressBtn">Compress Files</button>
+<!-- auto compress enabled -->
 <div class="progress"><div id="bar"></div></div>
 <div id="status" class="list"></div>
 <button id="downloadAll" disabled>Download All Files</button>
@@ -33,8 +33,7 @@ const { FFmpeg } = FFmpegWASM;
 const { fetchFile } = FFmpegUtil;
 const ffmpeg = new FFmpeg();
 let outputs=[];async function loadFF(){if(!ffmpeg.loaded){await ffmpeg.load({coreURL:'https://unpkg.com/@ffmpeg/core@0.12.6/dist/ffmpeg-core.js'});}}
-
-document.getElementById('compressBtn').onclick=async()=>{ const files=[...fileInput.files]; if(!files.length) return alert('Select MP3 files'); await loadFF(); outputs=[];status.innerHTML='';bar.style.width='0%'; let i=0; for(const f of files){ const inName=f.name; const outName='ANI_'+inName; await ffmpeg.writeFile(inName, await fetchFile(f)); await ffmpeg.exec(['-i',inName,'-map','0:a','-b:a','120k',outName]); const data=await ffmpeg.readFile(outName); outputs.push({name:outName,data}); status.innerHTML+=${inName} → ${outName}<br>; bar.style.width=((++i/files.length)*100)+'%'; } downloadAll.disabled=false; downloadZip.disabled=outputs.length<2; };
+fileInput.onchange=async()=>{ const files=[...fileInput.files]; if(!files.length) return; await loadFF(); outputs=[];status.innerHTML='';bar.style.width='0%'; let i=0; for(const f of files){ const inName=f.name; const outName='ANI_'+inName; await ffmpeg.writeFile(inName, await fetchFile(f)); await ffmpeg.exec(['-i',inName,'-map','0:a','-b:a','120k',outName]); const data=await ffmpeg.readFile(outName); outputs.push({name:outName,data}); status.innerHTML+=${inName} → ${outName}<br>; bar.style.width=((++i/files.length)*100)+'%'; } downloadAll.disabled=false; downloadZip.disabled=outputs.length<2; };
 
 downloadAll.onclick=()=>{ outputs.forEach(o=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([o.data.buffer],{type:'audio/mpeg'})); a.download=o.name;a.click(); }); };
 
