@@ -6,7 +6,7 @@
 <title>MP3 Compressor</title>
 
 <style>
-* { box-sizing: border-box; font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; }
+* { box-sizing: border-box; font-family: system-ui, sans-serif; }
 
 body {
   margin: 0;
@@ -45,8 +45,10 @@ h1 { font-size: 1.2rem; margin-bottom: 10px; }
   display: flex;
   justify-content: center;
   align-items: center;
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   cursor: pointer;
+  user-select: none;
+  line-height: 1.2;
 }
 
 select, button {
@@ -80,7 +82,6 @@ button:disabled { opacity: 0.5; }
   height: 100%;
   width: 0%;
   background: #00ffcc;
-  transition: width 0.2s linear;
 }
 
 .stats {
@@ -104,10 +105,17 @@ button:disabled { opacity: 0.5; }
 
 <h1>MP3 Compressor</h1>
 
-<div class="drop-box" id="dropBox">DROP</div>
+<div class="drop-box" id="dropBox">
+Tap or Drop<br>MP3(s)
+</div>
 
-<input type="file" id="singleFile" accept="audio/mp3" hidden />
-<input type="file" id="multiFile" accept="audio/mp3" multiple hidden />
+<input
+  type="file"
+  id="fileInput"
+  accept="audio/mp3"
+  multiple
+  hidden
+/>
 
 <select id="bitrate">
   <option value="120" selected>120 kbps (Recommended)</option>
@@ -116,8 +124,6 @@ button:disabled { opacity: 0.5; }
   <option value="64">64 kbps</option>
 </select>
 
-<button id="singleBtn">Upload Single MP3</button>
-<button id="multiBtn">Upload Multiple MP3s</button>
 <button id="downloadAllBtn" disabled>Download All Individually</button>
 <button id="downloadZipBtn" disabled>Download ZIP</button>
 
@@ -133,18 +139,22 @@ import { createFFmpeg, fetchFile } from "https://unpkg.com/@ffmpeg/ffmpeg@0.12.6
 import JSZip from "https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm";
 
 const ffmpeg = createFFmpeg({ log: false });
-let compressedFiles = [];
-
+const fileInput = document.getElementById("fileInput");
+const dropBox = document.getElementById("dropBox");
 const bar = document.getElementById("bar");
 const stats = document.getElementById("stats");
 const bitrate = document.getElementById("bitrate");
 
-async function loadFFmpeg() {
-  if (!ffmpeg.isLoaded()) await ffmpeg.load();
-}
+let compressedFiles = [];
+let ffmpegLoaded = false;
 
-function formatSize(bytes) {
-  return (bytes / 1024).toFixed(1) + " KB";
+function formatSize(b){ return (b/1024).toFixed(1)+" KB"; }
+
+async function loadFFmpeg() {
+  if (!ffmpegLoaded) {
+    await ffmpeg.load();
+    ffmpegLoaded = true;
+  }
 }
 
 async function compressFiles(files) {
@@ -153,18 +163,17 @@ async function compressFiles(files) {
   stats.innerHTML = "";
   bar.style.width = "0%";
 
-  let totalOriginal = 0;
-  let totalCompressed = 0;
+  let totalO = 0, totalC = 0;
 
   for (let i = 0; i < files.length; i++) {
-    const file = files[i];
-    totalOriginal += file.size;
+    const f = files[i];
+    totalO += f.size;
 
-    ffmpeg.FS("writeFile", file.name, await fetchFile(file));
-    const out = "c_" + file.name;
+    ffmpeg.FS("writeFile", f.name, await fetchFile(f));
+    const out = "c_" + f.name;
 
     await ffmpeg.run(
-      "-i", file.name,
+      "-i", f.name,
       "-vn",
       "-c:a", "libmp3lame",
       "-b:a", bitrate.value + "k",
@@ -173,31 +182,29 @@ async function compressFiles(files) {
 
     const data = ffmpeg.FS("readFile", out);
     const blob = new Blob([data.buffer], { type: "audio/mp3" });
+    totalC += blob.size;
 
-    totalCompressed += blob.size;
-    compressedFiles.push({ name: out, blob });
-
-    const reduction = (((file.size - blob.size) / file.size) * 100).toFixed(1);
-
+    const red = (((f.size - blob.size) / f.size) * 100).toFixed(1);
     stats.innerHTML += `
       <div>
-        ${file.name}<br>
-        ${formatSize(file.size)} → ${formatSize(blob.size)} (${reduction}% ↓)
+        ${f.name}<br>
+        ${formatSize(f.size)} → ${formatSize(blob.size)} (${red}% ↓)
       </div><br>
     `;
 
-    bar.style.width = Math.round(((i + 1) / files.length) * 100) + "%";
+    compressedFiles.push({ name: out, blob });
+    bar.style.width = Math.round(((i+1)/files.length)*100)+"%";
   }
 
   if (files.length > 1) {
-    const totalRed = (((totalOriginal - totalCompressed) / totalOriginal) * 100).toFixed(1);
+    const tr = (((totalO - totalC)/totalO)*100).toFixed(1);
     stats.innerHTML =
-      `<b>Total:</b> ${formatSize(totalOriginal)} → ${formatSize(totalCompressed)} (${totalRed}% ↓)<br><br>` +
+      `<b>Total:</b> ${formatSize(totalO)} → ${formatSize(totalC)} (${tr}% ↓)<br><br>` +
       stats.innerHTML;
   }
 
-  document.getElementById("downloadAllBtn").disabled = false;
-  document.getElementById("downloadZipBtn").disabled = false;
+  downloadAllBtn.disabled = false;
+  downloadZipBtn.disabled = false;
 }
 
 function download(blob, name) {
@@ -207,15 +214,21 @@ function download(blob, name) {
   a.click();
 }
 
-singleBtn.onclick = () => singleFile.click();
-multiBtn.onclick = () => multiFile.click();
+fileInput.onchange = e => {
+  if (e.target.files.length) compressFiles(e.target.files);
+};
 
-singleFile.onchange = e =>
-  compressFiles([e.target.files[0]]).then(() =>
-    download(compressedFiles[0].blob, compressedFiles[0].name)
-  );
+dropBox.onclick = () => {
+  fileInput.value = ""; // IMPORTANT: prevents double-trigger
+  fileInput.click();
+};
 
-multiFile.onchange = e => compressFiles(e.target.files);
+dropBox.ondragover = e => e.preventDefault();
+
+dropBox.ondrop = e => {
+  e.preventDefault();
+  compressFiles(e.dataTransfer.files);
+};
 
 downloadAllBtn.onclick = () =>
   compressedFiles.forEach(f => download(f.blob, f.name));
@@ -224,13 +237,6 @@ downloadZipBtn.onclick = async () => {
   const zip = new JSZip();
   compressedFiles.forEach(f => zip.file(f.name, f.blob));
   download(await zip.generateAsync({ type: "blob" }), "compressed_mp3s.zip");
-};
-
-dropBox.onclick = () => multiFile.click();
-dropBox.ondragover = e => e.preventDefault();
-dropBox.ondrop = e => {
-  e.preventDefault();
-  compressFiles(e.dataTransfer.files);
 };
 </script>
 </body>
