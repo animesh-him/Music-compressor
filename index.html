@@ -1,191 +1,243 @@
-<!DOCTYPE html>
-<html lang="en">
+<!DOCTYPE html><html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>MP3 Compressor</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MP3 Compressor</title>  <!-- FFmpeg WASM -->  <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.6/dist/ffmpeg.min.js"></script>  <style>
+    :root {
+      --bg1: #00c6ff;
+      --bg2: #00ffcc;
+      --card: rgba(0,0,0,0.15);
+      --text: #ffffff;
+      --accent: #000000;
+    }
 
-<style>
-* { box-sizing: border-box; font-family: system-ui, sans-serif; }
+    body.dark {
+      --bg1: #050010;
+      --bg2: #12002f;
+      --card: rgba(255,255,255,0.08);
+      --text: #eaffff;
+      --accent: #00ffd5;
+    }
 
-body {
-  margin: 0;
-  min-height: 100vh;
-  background: linear-gradient(135deg,#ff00cc,#3333ff,#00ffcc,#ff6600);
-  background-size: 400% 400%;
-  animation: bg 12s ease infinite;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  color: #fff;
-}
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: linear-gradient(135deg, var(--bg1), var(--bg2));
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      color: var(--text);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow-x: hidden;
+    }
 
-body.dark {
-  background: linear-gradient(135deg,#000,#111,#222,#000);
-}
+    .app {
+      width: 100%;
+      max-width: 420px;
+      padding: 16px;
+      box-sizing: border-box;
+    }
 
-@keyframes bg {
-  0%{background-position:0% 50%}
-  50%{background-position:100% 50%}
-  100%{background-position:0% 50%}
-}
+    h1 {
+      text-align: center;
+      margin: 12px 0 16px;
+    }
 
-.container {
-  width: 100%;
-  max-width: 420px;
-  padding: 14px;
-  text-align: center;
-}
+    .drop {
+      width: 96px;
+      height: 96px;
+      margin: 0 auto 14px;
+      border-radius: 16px;
+      border: 2px dashed rgba(255,255,255,0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      font-size: 13px;
+      cursor: pointer;
+      background: var(--card);
+    }
 
-h1 { font-size: 1.2rem; }
+    select, button {
+      width: 100%;
+      padding: 12px;
+      margin-top: 10px;
+      border-radius: 12px;
+      border: none;
+      font-size: 14px;
+    }
 
-label.drop-box {
-  width: 96px;
-  height: 96px;
-  margin: 12px auto;
-  border-radius: 16px;
-  background: rgba(0,0,0,0.35);
-  border: 2px dashed #fff;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  font-size: 0.65rem;
-  line-height: 1.2;
-  cursor: pointer;
-}
+    button {
+      background: var(--accent);
+      color: #000;
+      font-weight: 600;
+    }
 
-select, button {
-  width: 100%;
-  margin-top: 8px;
-  padding: 10px;
-  border-radius: 12px;
-  border: none;
-}
+    body.dark button {
+      color: #000;
+    }
 
-button { background:#000; color:#fff; }
+    .progress {
+      margin-top: 14px;
+      background: rgba(255,255,255,0.2);
+      border-radius: 10px;
+      overflow: hidden;
+      display: none;
+    }
 
-.progress {
-  width: 100%;
-  height: 8px;
-  background: rgba(255,255,255,0.25);
-  border-radius: 10px;
-  overflow: hidden;
-  margin-top: 10px;
-}
+    .bar {
+      height: 10px;
+      width: 0%;
+      background: #00ffcc;
+      transition: width 0.2s;
+    }
 
-.bar {
-  height: 100%;
-  width: 0%;
-  background: #00ffcc;
-}
+    .status {
+      font-size: 12px;
+      margin-top: 6px;
+      text-align: center;
+    }
 
-.stats {
-  margin-top: 8px;
-  font-size: 0.75rem;
-  text-align: left;
-  max-height: 140px;
-  overflow-y: auto;
-}
+    .compare {
+      font-size: 12px;
+      margin-top: 10px;
+      text-align: center;
+    }
 
-audio { width: 100%; margin-top: 8px; }
+    audio {
+      width: 100%;
+      margin-top: 10px;
+    }
 
-.footer {
-  margin-top: 12px;
-  font-size: 0.7rem;
-  opacity: 0.8;
-}
-</style>
-</head>
+    footer {
+      text-align: center;
+      margin-top: 16px;
+      font-size: 12px;
+      opacity: 0.8;
+    }
+  </style></head>
+<body><div class="app">
+  <h1>MP3 Compressor</h1>  <div id="drop" class="drop">Tap or Drop<br>MP3(s)</div>
+  <input id="fileInput" type="file" accept="audio/*" multiple hidden />  <select id="bitrate">
+    <option value="120" selected>120 kbps (Recommended)</option>
+    <option value="96">96 kbps</option>
+    <option value="64">64 kbps</option>
+  </select><button id="darkBtn">Toggle Dark Neon</button> <button id="opusBtn">Enable OPUS (Advanced)</button>
 
-<body>
-<div class="container">
+  <div class="progress" id="progress">
+    <div class="bar" id="bar"></div>
+  </div>
+  <div class="status" id="status"></div>  <div class="compare" id="compare"></div><audio id="preview" controls hidden></audio>
 
-<h1>MP3 Compressor</h1>
+<button id="downloadSingle" hidden>Download File</button> <button id="downloadZip" hidden>Download All as ZIP</button>
 
-<!-- ✅ RELIABLE MOBILE INPUT -->
-<label for="fileInput" class="drop-box">
-Tap or Drop<br>MP3(s)
-</label>
+  <footer>Created by Animesh</footer>
+</div><script>
+  const { createFFmpeg, fetchFile } = FFmpeg;
+  const ffmpeg = createFFmpeg({ log: true });
 
-<input id="fileInput" type="file" accept="audio/mp3" multiple hidden>
+  const drop = document.getElementById('drop');
+  const fileInput = document.getElementById('fileInput');
+  const progress = document.getElementById('progress');
+  const bar = document.getElementById('bar');
+  const status = document.getElementById('status');
+  const compare = document.getElementById('compare');
+  const preview = document.getElementById('preview');
+  const downloadSingle = document.getElementById('downloadSingle');
+  const downloadZip = document.getElementById('downloadZip');
 
-<select id="bitrate">
-  <option value="120" selected>120 kbps (Recommended)</option>
-  <option value="96">96 kbps</option>
-  <option value="80">80 kbps</option>
-  <option value="64">64 kbps</option>
-</select>
+  let useOpus = false;
+  let outputs = [];
 
-<button id="darkToggle">Toggle Dark Neon</button>
-<button id="opusToggle">Enable OPUS (Advanced)</button>
+  drop.onclick = () => fileInput.click();
 
-<div class="progress"><div class="bar" id="bar"></div></div>
-<div class="stats" id="stats"></div>
-<audio id="preview" controls hidden></audio>
+  drop.ondragover = e => { e.preventDefault(); };
+  drop.ondrop = e => {
+    e.preventDefault();
+    handleFiles(e.dataTransfer.files);
+  };
 
-<div class="footer">Created by Animesh</div>
+  fileInput.onchange = () => handleFiles(fileInput.files);
 
-</div>
+  document.getElementById('darkBtn').onclick = () => {
+    document.body.classList.toggle('dark');
+  };
 
-<script type="module">
-import { createFFmpeg, fetchFile } from "https://unpkg.com/@ffmpeg/ffmpeg@0.12.6/dist/ffmpeg.min.js";
+  document.getElementById('opusBtn').onclick = () => {
+    useOpus = !useOpus;
+    alert(useOpus ? 'OPUS Enabled' : 'OPUS Disabled');
+  };
 
-const ffmpeg = createFFmpeg({ log:false });
-let useOpus = false;
+  async function handleFiles(files) {
+    outputs = [];
+    preview.hidden = true;
+    downloadSingle.hidden = true;
+    downloadZip.hidden = true;
+    compare.textContent = '';
 
-const input = document.getElementById("fileInput");
-const bar = document.getElementById("bar");
-const stats = document.getElementById("stats");
-const preview = document.getElementById("preview");
+    progress.style.display = 'block';
+    bar.style.width = '0%';
+    status.textContent = 'Loading engine...';
 
-document.getElementById("darkToggle").onclick =
-  () => document.body.classList.toggle("dark");
+    if (!ffmpeg.isLoaded()) await ffmpeg.load();
 
-document.getElementById("opusToggle").onclick =
-  () => useOpus = !useOpus;
+    let done = 0;
+    const bitrate = document.getElementById('bitrate').value;
 
-function kb(b){ return (b/1024).toFixed(1)+" KB"; }
+    for (const file of files) {
+      status.textContent = `Compressing ${file.name}`;
 
-input.onchange = async e => {
-  const files = [...e.target.files];
-  if (!files.length) return;
+      const inputName = file.name;
+      const outputName = `ANI_${file.name.replace(/\.[^/.]+$/, '')}.${useOpus ? 'opus' : 'mp3'}`;
 
-  stats.innerHTML = "Loading engine...";
-  if (!ffmpeg.isLoaded()) await ffmpeg.load();
+      ffmpeg.FS('writeFile', inputName, await fetchFile(file));
 
-  const start = Date.now();
-  let total = files.length;
+      await ffmpeg.run(
+        '-i', inputName,
+        '-b:a', bitrate + 'k',
+        outputName
+      );
 
-  for (let i=0;i<files.length;i++) {
-    const f = files[i];
-    ffmpeg.FS("writeFile", f.name, await fetchFile(f));
+      const data = ffmpeg.FS('readFile', outputName);
+      const blob = new Blob([data.buffer], { type: 'audio/' + (useOpus ? 'opus' : 'mp3') });
 
-    const out = "c_"+f.name;
-    const codec = useOpus ? ["-c:a","libopus","-b:a","64k"] :
-      ["-c:a","libmp3lame","-b:a",document.getElementById("bitrate").value+"k"];
+      outputs.push({ name: outputName, blob, original: file.size, compressed: blob.size });
 
-    await ffmpeg.run("-i",f.name,"-vn",...codec,out);
+      done++;
+      bar.style.width = `${Math.round((done / files.length) * 100)}%`;
+    }
 
-    const data = ffmpeg.FS("readFile", out);
-    const blob = new Blob([data.buffer], { type:"audio/mp3" });
+    status.textContent = 'Done';
 
-    const done = i+1;
-    const elapsed = (Date.now()-start)/1000;
-    const eta = ((elapsed/done)*(total-done)).toFixed(1);
-
-    bar.style.width = Math.round((done/total)*100)+"%";
-    stats.innerHTML = `
-      ${f.name}<br>
-      ${kb(f.size)} → ${kb(blob.size)}<br>
-      ${Math.round((done/total)*100)}% · ETA ${eta}s
-    `;
-
-    if (total === 1) {
-      preview.src = URL.createObjectURL(blob);
+    if (outputs.length === 1) {
+      const o = outputs[0];
+      compare.textContent = `Before: ${(o.original/1024).toFixed(1)} KB | After: ${(o.compressed/1024).toFixed(1)} KB`;
+      preview.src = URL.createObjectURL(o.blob);
       preview.hidden = false;
+
+      downloadSingle.hidden = false;
+      downloadSingle.onclick = () => save(o.blob, o.name);
+    } else {
+      let before = 0, after = 0;
+      outputs.forEach(o => { before += o.original; after += o.compressed; });
+      compare.textContent = `Before: ${(before/1024).toFixed(1)} KB | After: ${(after/1024).toFixed(1)} KB`;
+      downloadZip.hidden = false;
+      downloadZip.onclick = downloadAllZip;
     }
   }
-};
-</script>
-</body>
+
+  function save(blob, name) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+  }
+
+  async function downloadAllZip() {
+    const zip = new JSZip();
+    outputs.forEach(o => zip.file(o.name, o.blob));
+    const blob = await zip.generateAsync({ type: 'blob' });
+    save(blob, 'compressed_audio.zip');
+  }
+</script><script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script></body>
 </html>
