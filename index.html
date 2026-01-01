@@ -1,125 +1,44 @@
 <!DOCTYPE html><html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MP3 Compressor</title><script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.6/dist/ffmpeg.min.js"></script><script src="https://unpkg.com/@ffmpeg/util@0.12.6/dist/util.min.js"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script><style>
-body{
-  margin:0;min-height:100vh;display:flex;justify-content:center;align-items:center;
-  background:linear-gradient(135deg,#ff00cc,#3333ff,#00ffcc);
-  font-family:system-ui,-apple-system,Segoe UI,Roboto;color:#fff
-}
-.container{width:100%;max-width:420px;padding:16px;text-align:center}
-.card{background:rgba(0,0,0,0.35);border-radius:16px;padding:16px}
-input,button,select{width:100%;margin-top:10px;padding:14px;border:none;border-radius:12px;font-size:15px}
-button{background:#000;color:#fff}
-select{color:#000}
-.progressWrap{display:none;margin-top:12px}
-.progress{height:10px;background:#ffffff55;border-radius:8px;overflow:hidden}
-.bar{height:100%;width:0;background:#00ffcc}
-.stats{display:none;font-size:13px;margin-top:10px;word-break:break-word}
-footer{margin-top:16px;font-size:14px;font-family:cursive}
-</style></head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MP3 Compressor</title>
+<script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.6/dist/ffmpeg.min.js"></script>
+<script src="https://unpkg.com/@ffmpeg/util@0.12.1/dist/index.js"></script>
+<style>
+body{margin:0;font-family:system-ui;background:radial-gradient(circle at top,#ff00cc,#333399);color:#fff;min-height:100vh;display:flex;justify-content:center}
+.container{max-width:420px;width:100%;padding:16px}
+button,input{width:100%;padding:14px;margin-top:12px;border:none;border-radius:10px;font-size:16px}
+button{background:#00ffd5;color:#000;font-weight:700}
+button:disabled{opacity:.5}
+.progress{height:8px;background:#222;border-radius:6px;overflow:hidden;margin-top:10px}
+.progress div{height:100%;width:0;background:#00ffd5}
+.list{font-size:14px;margin-top:10px}
+.credit{margin-top:30px;font-family:cursive;text-align:center;opacity:.8}
+</style>
+</head>
 <body>
 <div class="container">
 <h2>MP3 Compressor</h2>
-<div class="card"><!-- VISIBLE FILE INPUT (MOST RELIABLE) --><input id="fileInput" type="file" accept=".mp3,audio/mpeg,audio/*" multiple><select id="bitrate">
-  <option value="120" selected>120 kbps (Recommended)</option>
-  <option value="96">96 kbps</option>
-  <option value="64">64 kbps</option>
-</select><button id="startBtn">Compress Files</button>
-
-<div class="progressWrap" id="progressWrap">
-  <div class="progress"><div class="bar" id="bar"></div></div>
-  <div id="progressText" style="font-size:12px;margin-top:6px"></div>
-</div><div class="stats" id="stats"></div><button id="downloadFiles" style="display:none">Download Files</button> <button id="downloadZip" style="display:none">Download All as ZIP</button>
-
+<input id="fileInput" type="file" accept=".mp3,audio/mpeg" multiple />
+<button id="compressBtn">Compress Files</button>
+<div class="progress"><div id="bar"></div></div>
+<div id="status" class="list"></div>
+<button id="downloadAll" disabled>Download All Files</button>
+<button id="downloadZip" disabled>Download All as ZIP</button>
+<div class="credit">Created by Animesh</div>
 </div>
-<footer>Created by Animesh</footer>
-</div><script>
+<script>
 const { FFmpeg } = FFmpegWASM;
 const { fetchFile } = FFmpegUtil;
 const ffmpeg = new FFmpeg();
+let outputs=[];async function loadFF(){if(!ffmpeg.loaded){await ffmpeg.load({coreURL:'https://unpkg.com/@ffmpeg/core@0.12.6/dist/ffmpeg-core.js'});}}
 
-const fileInput = document.getElementById('fileInput');
-const startBtn = document.getElementById('startBtn');
-const progressWrap = document.getElementById('progressWrap');
-const bar = document.getElementById('bar');
-const progressText = document.getElementById('progressText');
-const stats = document.getElementById('stats');
-const downloadFiles = document.getElementById('downloadFiles');
-const downloadZip = document.getElementById('downloadZip');
+document.getElementById('compressBtn').onclick=async()=>{ const files=[...fileInput.files]; if(!files.length) return alert('Select MP3 files'); await loadFF(); outputs=[];status.innerHTML='';bar.style.width='0%'; let i=0; for(const f of files){ const inName=f.name; const outName='ANI_'+inName; await ffmpeg.writeFile(inName, await fetchFile(f)); await ffmpeg.exec(['-i',inName,'-map','0:a','-b:a','120k',outName]); const data=await ffmpeg.readFile(outName); outputs.push({name:outName,data}); status.innerHTML+=${inName} → ${outName}<br>; bar.style.width=((++i/files.length)*100)+'%'; } downloadAll.disabled=false; downloadZip.disabled=outputs.length<2; };
 
-let outputs = [];
+downloadAll.onclick=()=>{ outputs.forEach(o=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([o.data.buffer],{type:'audio/mpeg'})); a.download=o.name;a.click(); }); };
 
-startBtn.onclick = async () => {
-  const files = Array.from(fileInput.files);
-  if(!files.length){alert('Please select file(s)');return;}
+downloadZip.onclick=async()=>{ const JSZip=await import('https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm'); const zip=new JSZip.default(); outputs.forEach(o=>zip.file(o.name,o.data.buffer)); const blob=await zip.generateAsync({type:'blob'}); const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='compressed_mp3s.zip';a.click(); }; </script>
 
-  outputs = [];
-  stats.style.display='none';
-  downloadFiles.style.display='none';
-  downloadZip.style.display='none';
-
-  progressWrap.style.display='block';
-  bar.style.width='0%';
-  progressText.textContent='Loading engine…';
-
-  if(!ffmpeg.loaded){
-    await ffmpeg.load({coreURL:'https://unpkg.com/@ffmpeg/core@0.12.6/dist/ffmpeg-core.js'});
-  }
-
-  const br = document.getElementById('bitrate').value + 'k';
-  let done = 0;
-
-  for(const file of files){
-    const input = file.name;
-    const output = 'ANI_' + input.replace(/\.[^/.]+$/, '.mp3');
-
-    await ffmpeg.writeFile(input, await fetchFile(file));
-    await ffmpeg.exec(['-i', input, '-b:a', br, output]);
-    const data = await ffmpeg.readFile(output);
-
-    outputs.push({
-      name: output,
-      blob: new Blob([data.buffer], {type:'audio/mpeg'}),
-      before: file.size,
-      after: data.buffer.byteLength
-    });
-
-    done++;
-    const pct = Math.round(done / files.length * 100);
-    bar.style.width = pct + '%';
-    progressText.textContent = `Processing ${pct}%`;
-  }
-
-  let html='';
-  outputs.forEach(o=>{
-    html += `${o.name}<br>${(o.before/1024/1024).toFixed(2)} MB → ${(o.after/1024/1024).toFixed(2)} MB<br><br>`;
-  });
-  stats.innerHTML = html;
-  stats.style.display='block';
-
-  downloadFiles.style.display='block';
-  if(outputs.length>1) downloadZip.style.display='block';
-};
-
-downloadFiles.onclick = () => {
-  outputs.forEach(o=>{
-    const a=document.createElement('a');
-    a.href=URL.createObjectURL(o.blob);
-    a.download=o.name;
-    a.click();
-  });
-};
-
-downloadZip.onclick = async () => {
-  const zip=new JSZip();
-  outputs.forEach(o=>zip.file(o.name,o.blob));
-  const blob=await zip.generateAsync({type:'blob'});
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download='ANI_audio.zip';
-  a.click();
-};
-</script></body>
+</body>
 </html>
