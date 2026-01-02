@@ -102,6 +102,7 @@
             transition: all 0.3s ease;
             margin-bottom: 20px;
             box-shadow: 0 8px 25px rgba(255,107,107,0.4);
+            width: 100%;
         }
         .process-btn:hover:not(:disabled) {
             transform: translateY(-2px);
@@ -150,17 +151,36 @@
         .overall-progress {
             background: rgba(255,255,255,0.1);
             border-radius: 10px;
-            padding: 15px;
+            padding: 20px;
             text-align: center;
             backdrop-filter: blur(10px);
+            margin-bottom: 20px;
         }
         .overall-fill {
-            height: 10px;
+            height: 12px;
             background: linear-gradient(90deg, #4facfe, #00f2fe);
-            border-radius: 5px;
-            margin: 10px 0;
+            border-radius: 6px;
+            margin: 15px 0;
             width: 0%;
             transition: width 0.3s ease;
+        }
+        .overall-stats {
+            display: flex;
+            justify-content: space-around;
+            font-size: 0.9em;
+            margin-top: 10px;
+        }
+        .stat-item {
+            text-align: center;
+        }
+        .stat-value {
+            font-weight: 700;
+            font-size: 1.1em;
+            display: block;
+        }
+        .stat-label {
+            opacity: 0.8;
+            font-size: 0.8em;
         }
         .download-section {
             display: none;
@@ -181,6 +201,7 @@
             text-decoration: none;
             text-align: center;
             box-shadow: 0 8px 25px rgba(17,153,142,0.4);
+            width: 100%;
         }
         .download-btn:hover {
             transform: translateY(-2px);
@@ -193,6 +214,19 @@
             font-family: 'Dancing Script', cursive;
             font-size: 1.5em;
             opacity: 0.9;
+        }
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
         @media (max-width: 480px) {
             h1 { font-size: 1.8em; }
@@ -209,11 +243,11 @@
         </div>
         
         <div class="drop-zone" id="dropZone">
-            <p>📱 Drag & drop MP3 files here (max 15)</p>
-            <p>or <span class="file-input-wrapper">
+            <p>📱 Tap or drag MP3 files here (max 15)</p>
+            <div class="file-input-wrapper" style="width: 100%;">
                 <input type="file" id="fileInput" multiple accept="audio/mp3,audio/mpeg" />
-                <span style="border: 2px solid white; padding: 8px 16px; border-radius: 20px; font-weight: 600;">Browse Files</span>
-            </span></p>
+                <div style="border: 2px solid white; padding: 12px 24px; border-radius: 25px; font-weight: 600; display: inline-block; background: rgba(255,255,255,0.1);">Choose Files</div>
+            </div>
         </div>
         
         <select id="bitrateSelect" class="bitrate-select">
@@ -223,18 +257,31 @@
             <option value="128">128 kbps (High)</option>
         </select>
         
-        <button id="processBtn" class="process-btn">🚀 Compress Files</button>
+        <button id="processBtn" class="process-btn">🚀 Start Compression</button>
         
         <div id="progressContainer" class="progress-container"></div>
         
         <div id="overallProgress" class="overall-progress hidden">
-            <div style="font-size: 1.1em; font-weight: 600; margin-bottom: 10px;">Overall Progress</div>
+            <div style="font-size: 1.2em; font-weight: 700; margin-bottom: 15px;" id="overallTitle">Processing...</div>
             <div class="overall-fill" id="overallFill"></div>
-            <div id="overallText" style="font-size: 0.9em; margin-top: 5px;">0 / 0 files</div>
+            <div class="overall-stats">
+                <div class="stat-item">
+                    <span class="stat-value" id="overallPercent">0%</span>
+                    <span class="stat-label">Progress</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value" id="timeRemaining">--:--</span>
+                    <span class="stat-label">Time Left</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value" id="overallSpeed">--</span>
+                    <span class="stat-label">Speed</span>
+                </div>
+            </div>
         </div>
         
         <div id="downloadSection" class="download-section">
-            <a id="zipDownload" class="download-btn" download="compressed.zip">💾 Download ZIP (Compressed)</a>
+            <a id="zipDownload" class="download-btn" download="compressed.zip">💾 Download Compressed ZIP</a>
             <a id="originalsDownload" class="download-btn" download="originals.zip">📁 Download Originals ZIP</a>
             <button id="clearBtn" class="download-btn" style="background: linear-gradient(45deg, #f093fb, #f5576c);">🗑️ Clear All</button>
         </div>
@@ -249,8 +296,11 @@
                 this.compressedBlobs = [];
                 this.originalBlobs = [];
                 this.worker = null;
-                this.totalFiles = 0;
-                this.completedFiles = 0;
+                this.isProcessing = false;
+                this.startTime = 0;
+                this.totalBytes = 0;
+                this.processedBytes = 0;
+                this.fileProgress = {};
                 
                 this.init();
             }
@@ -263,6 +313,17 @@
                 const dropZone = document.getElementById('dropZone');
                 const fileInput = document.getElementById('fileInput');
                 const processBtn = document.getElementById('processBtn');
+                const dropZoneBtn = dropZone.querySelector('.file-input-wrapper');
+                
+                // Single tap/click handler
+                const handleFileSelect = (e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    this.handleFiles(fileInput.files);
+                };
+                
+                dropZone.addEventListener('click', handleFileSelect);
+                dropZoneBtn.addEventListener('click', handleFileSelect);
                 
                 // Drag & Drop
                 dropZone.addEventListener('dragover', (e) => {
@@ -280,9 +341,7 @@
                     this.handleFiles(e.dataTransfer.files);
                 });
                 
-                fileInput.addEventListener('change', (e) => {
-                    this.handleFiles(e.target.files);
-                });
+                fileInput.addEventListener('change', handleFileSelect);
                 
                 processBtn.addEventListener('click', () => this.processFiles());
                 
@@ -300,111 +359,150 @@
                 }
                 
                 this.files = mp3Files.slice(0, 15);
+                this.totalBytes = this.files.reduce((sum, file) => sum + file.size, 0);
                 this.updateFileList();
-                document.getElementById('processBtn').disabled = false;
+                document.getElementById('processBtn').disabled = this.files.length === 0;
             }
             
             updateFileList() {
                 const container = document.getElementById('progressContainer');
                 container.innerHTML = '';
-                container.style.display = 'block';
+                container.style.display = this.files.length > 0 ? 'block' : 'none';
                 
                 this.files.forEach((file, index) => {
                     const fileDiv = document.createElement('div');
                     fileDiv.className = 'file-progress';
                     fileDiv.id = `file-${index}`;
                     fileDiv.innerHTML = `
-                        <div class="file-name">${file.name}</div>
+                        <div class="file-name">${file.name} <span style="font-size:0.8em;opacity:0.7">(${this.formatBytes(file.size)})</span></div>
                         <div class="progress-bar">
-                            <div class="progress-fill" id="progress-${index}"></div>
+                            <div class="progress-fill" id="progress-${index}" style="width:0%"></div>
                         </div>
                         <div class="stats">
-                            <span id="original-${index}">Original: ${this.formatBytes(file.size)}</span>
-                            <span id="compressed-${index}">Compressed: --</span>
-                            <span id="reduction-${index}">--</span>
+                            <span id="compressed-${index}">0%</span>
+                            <span id="speed-${index}">0 KB/s</span>
                         </div>
                     `;
                     container.appendChild(fileDiv);
+                    this.fileProgress[index] = { processed: 0, startTime: 0 };
                 });
             }
             
             async processFiles() {
-                const bitrate = parseInt(document.getElementById('bitrateSelect').value);
-                this.totalFiles = this.files.length;
-                this.completedFiles = 0;
-                this.compressedBlobs = [];
-                this.originalBlobs = [];
+                if (this.isProcessing) return;
                 
+                const bitrate = parseInt(document.getElementById('bitrateSelect').value);
+                this.isProcessing = true;
+                this.startTime = performance.now();
+                this.processedBytes = 0;
+                
+                document.getElementById('processBtn').innerHTML = '<div class="spinner"></div>Processing...';
                 document.getElementById('processBtn').disabled = true;
                 document.getElementById('progressContainer').style.display = 'block';
                 document.getElementById('overallProgress').classList.remove('hidden');
                 document.getElementById('downloadSection').style.display = 'none';
                 
-                // Create Web Worker
-                const workerCode = this.createWorkerCode(bitrate);
+                // Create optimized worker
+                const workerCode = this.createOptimizedWorkerCode(bitrate);
                 const blob = new Blob([workerCode], { type: 'application/javascript' });
                 this.worker = new Worker(URL.createObjectURL(blob));
                 
-                this.worker.onmessage = (e) => {
-                    const { index, progress, done, blob, originalSize, compressedSize } = e.data;
-                    
-                    // Update file progress
-                    const progressEl = document.getElementById(`progress-${index}`);
-                    const originalEl = document.getElementById(`original-${index}`);
-                    const compressedEl = document.getElementById(`compressed-${index}`);
-                    const reductionEl = document.getElementById(`reduction-${index}`);
-                    
-                    if (progressEl) progressEl.style.width = `${progress}%`;
-                    
-                    if (done) {
-                        this.completedFiles++;
-                        this.compressedBlobs[index] = blob;
-                        this.originalBlobs[index] = this.files[index];
-                        
-                        originalEl.textContent = `Original: ${this.formatBytes(originalSize)}`;
-                        compressedEl.textContent = `Compressed: ${this.formatBytes(compressedSize)}`;
-                        const reduction = ((originalSize - compressedSize) / originalSize * 100).toFixed(1);
-                        reductionEl.textContent = `${reduction}% ↓`;
-                        
-                        this.updateOverallProgress();
-                    }
-                };
-                
+                this.worker.onmessage = (e) => this.handleWorkerMessage(e.data);
                 this.worker.onerror = (e) => {
                     console.error('Worker error:', e);
-                    alert('Error processing file: ' + e.message);
+                    this.onError('Processing error: ' + e.message);
                 };
                 
-                // Process files sequentially
+                // Sequential processing with real-time progress
                 for (let i = 0; i < this.files.length; i++) {
-                    await new Promise(resolve => {
-                        this.worker.postMessage({
-                            file: this.files[i],
-                            index: i
-                        });
-                        
-                        const checkDone = setInterval(() => {
-                            if (this.completedFiles > i || this.compressedBlobs[i]) {
-                                clearInterval(checkDone);
-                                resolve();
-                            }
-                        }, 100);
-                    });
+                    if (!this.isProcessing) break;
+                    await this.processSingleFile(i);
+                }
+                
+                if (this.isProcessing) {
+                    this.finishProcessing();
                 }
             }
             
-            updateOverallProgress() {
-                const progress = (this.completedFiles / this.totalFiles) * 100;
-                document.getElementById('overallFill').style.width = `${progress}%`;
-                document.getElementById('overallText').textContent = 
-                    `${this.completedFiles} / ${this.totalFiles} files`;
+            handleWorkerMessage(data) {
+                const { index, progress, processedBytes, blob, speed } = data;
                 
-                if (this.completedFiles === this.totalFiles) {
-                    document.getElementById('processBtn').disabled = false;
-                    document.getElementById('processBtn').textContent = '✅ Done!';
-                    document.getElementById('downloadSection').style.display = 'block';
-                    this.enableDownloads();
+                if (progress !== undefined) {
+                    const progressEl = document.getElementById(`progress-${index}`);
+                    const percentEl = document.getElementById(`compressed-${index}`);
+                    const speedEl = document.getElementById(`speed-${index}`);
+                    
+                    if (progressEl) progressEl.style.width = `${progress}%`;
+                    if (percentEl) percentEl.textContent = `${progress.toFixed(1)}%`;
+                    if (speedEl) speedEl.textContent = speed;
+                    
+                    this.fileProgress[index].processed = processedBytes;
+                    this.processedBytes += processedBytes;
+                    this.updateOverallProgress();
                 }
+                
+                if (blob) {
+                    this.compressedBlobs[index] = blob;
+                    this.originalBlobs[index] = this.files[index];
+                }
+            }
+            
+            async processSingleFile(index) {
+                return new Promise((resolve) => {
+                    this.fileProgress[index].startTime = performance.now();
+                    this.worker.postMessage({
+                        file: this.files[index],
+                        index: index,
+                        totalBytes: this.totalBytes
+                    });
+                    
+                    const checkComplete = () => {
+                        if (this.compressedBlobs[index]) {
+                            resolve();
+                        } else if (!this.isProcessing) {
+                            resolve();
+                        } else {
+                            setTimeout(checkComplete, 50);
+                        }
+                    };
+                    checkComplete();
+                });
+            }
+            
+            updateOverallProgress() {
+                const elapsed = (performance.now() - this.startTime) / 1000;
+                const overallProgress = Math.min(100, (this.processedBytes / this.totalBytes) * 100);
+                
+                document.getElementById('overallFill').style.width = `${overallProgress}%`;
+                document.getElementById('overallPercent').textContent = `${overallProgress.toFixed(1)}%`;
+                
+                if (elapsed > 0) {
+                    const speed = (this.processedBytes / elapsed / 1024).toFixed(1);
+                    const remainingBytes = this.totalBytes - this.processedBytes;
+                    const remainingTime = remainingBytes / (this.processedBytes / elapsed) / 1000;
+                    
+                    document.getElementById('overallSpeed').textContent = `${speed} KB/s`;
+                    
+                    const mins = Math.floor(remainingTime / 60);
+                    const secs = Math.floor(remainingTime % 60);
+                    document.getElementById('timeRemaining').textContent = 
+                        `${mins}:${secs.toString().padStart(2, '0')}`;
+                }
+            }
+            
+            finishProcessing() {
+                this.isProcessing = false;
+                document.getElementById('processBtn').innerHTML = '✅ All Done!';
+                document.getElementById('overallTitle').textContent = 'Completed!';
+                document.getElementById('downloadSection').style.display = 'block';
+                this.enableDownloads();
+            }
+            
+            onError(message) {
+                this.isProcessing = false;
+                alert(message);
+                document.getElementById('processBtn').textContent = '🚀 Start Compression';
+                document.getElementById('processBtn').disabled = false;
             }
             
             enableDownloads() {
@@ -429,115 +527,137 @@
                 saveAs(content, `${name}.zip`);
             }
             
-            createWorkerCode(bitrate) {
+            createOptimizedWorkerCode(bitrate) {
                 return `
-                    importScripts('https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js');
-                    
                     self.onmessage = function(e) {
-                        const { file, index } = e.data;
-                        
-                        processFile(file, index);
+                        const { file, index, totalBytes } = e.data;
+                        processFile(file, index, totalBytes);
                     };
                     
-                    async function processFile(file, index) {
+                    async function processFile(file, index, totalBytes) {
                         try {
                             const arrayBuffer = await file.arrayBuffer();
-                            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                            const audioContext = new AudioContext();
                             const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
                             
-                            // Downsample to 22.05kHz and convert to mono for large files
+                            // Aggressive optimization for large files
                             let channels = 1;
                             let sampleRate = 22050;
+                            let kbps = ${bitrate};
                             
-                            if (file.size > 50 * 1024 * 1024) { // Large files
+                            if (file.size > 80000000) { // 80MB+
+                                sampleRate = 16000;
+                                kbps = 32;
+                                channels = 1;
+                            } else if (file.size > 50000000) { // 50MB+
                                 sampleRate = 22050;
-                                channels = 1;
-                            } else if (file.size > 20 * 1024 * 1024) {
-                                sampleRate = 32000;
-                                channels = 1;
+                                kbps = 48;
                             }
                             
-                            const mp3encoder = new lamejs.Mp3Encoder(channels, audioBuffer.sampleRate, bitrate);
-                            const samples = audioBuffer.getChannelData(0);
+                            const mp3encoder = new lamejs.Mp3Encoder(channels, sampleRate, kbps);
                             
-                            // Resample if needed
-                            let resampledSamples = samples;
-                            if (audioBuffer.sampleRate !== sampleRate) {
-                                resampledSamples = resample(samples, audioBuffer.sampleRate, sampleRate);
+                            // Convert to mono if stereo
+                            let leftChannel, rightChannel;
+                            if (audioBuffer.numberOfChannels === 1) {
+                                leftChannel = audioBuffer.getChannelData(0);
+                            } else {
+                                leftChannel = audioBuffer.getChannelData(0);
+                                rightChannel = audioBuffer.getChannelData(1);
                             }
                             
-                            // Convert to 16-bit PCM
-                            const pcmData = new Int16Array(resampledSamples.length);
-                            for (let i = 0; i < resampledSamples.length; i++) {
-                                pcmData[i] = Math.max(-32768, Math.min(32767, resampledSamples[i] * 32768));
-                            }
+                            // Downsample aggressively
+                            const ratio = sampleRate / audioBuffer.sampleRate;
+                            const downsampledLength = Math.floor(leftChannel.length * ratio);
+                            const downsampledLeft = new Float32Array(downsampledLength);
                             
-                            const mp3Data = [];
-                            const sampleBlockSize = 1152;
-                            
-                            for (let i = 0; i < pcmData.length; i += sampleBlockSize) {
-                                const sampleChunk = pcmData.subarray(i, i + sampleBlockSize);
-                                const mp3buf = mp3encoder.encodeBuffer(sampleChunk);
-                                if (mp3buf.length > 0) {
-                                    mp3Data.push(mp3buf);
+                            for (let i = 0; i < downsampledLength; i++) {
+                                const srcIndex = Math.floor(i / ratio);
+                                downsampledLeft[i] = leftChannel[srcIndex];
+                                if (rightChannel) {
+                                    downsampledLeft[i] = (downsampledLeft[i] + rightChannel[srcIndex]) / 2;
                                 }
                             }
                             
-                            const finalMp3buf = mp3encoder.flush();
-                            if (finalMp3buf.length > 0) {
-                                mp3Data.push(finalMp3buf);
+                            // Convert to 16-bit PCM and encode in chunks
+                            const pcmData = new Int16Array(downsampledLeft.length);
+                            for (let i = 0; i < downsampledLeft.length; i++) {
+                                pcmData[i] = Math.max(-32768, Math.min(32767, downsampledLeft[i] * 32768));
+                            }
+                            
+                            const chunkSize = 576; // Smaller chunks for better progress
+                            const mp3Data = [];
+                            let processedBytes = 0;
+                            
+                            for (let i = 0; i < pcmData.length; i += chunkSize) {
+                                const chunk = pcmData.subarray(i, i + chunkSize);
+                                const mp3buf = mp3encoder.encodeBuffer(chunk);
+                                
+                                if (mp3buf.length > 0) {
+                                    mp3Data.push(mp3buf);
+                                    processedBytes += chunk.length * 2; // bytes processed
+                                    
+                                    // Send progress every 5%
+                                    const progress = (processedBytes / file.size) * 100;
+                                    if (progress % 5 < 1) {
+                                        const speed = (processedBytes / (performance.now() / 1000)).toFixed(0);
+                                        self.postMessage({
+                                            index,
+                                            progress,
+                                            processedBytes: chunk.length * 2,
+                                            speed: speed + ' B/s'
+                                        });
+                                    }
+                                }
+                            }
+                            
+                            const finalBuffer = mp3encoder.flush();
+                            if (finalBuffer.length > 0) {
+                                mp3Data.push(finalBuffer);
                             }
                             
                             const blob = new Blob(mp3Data, { type: 'audio/mp3' });
-                            const compressedSize = blob.size;
-                            const originalSize = file.size;
                             
                             self.postMessage({
                                 index,
-                                done: true,
-                                blob,
-                                originalSize,
-                                compressedSize
+                                progress: 100,
+                                processedBytes: file.size,
+                                blob: blob,
+                                speed: '100%'
                             });
                             
                         } catch (error) {
-                            self.postMessage({ index, error: error.message });
+                            self.postMessage({ 
+                                index, 
+                                error: 'Failed: ' + error.message,
+                                progress: 0
+                            });
                         }
-                    }
-                    
-                    function resample(input, inputSampleRate, outputSampleRate) {
-                        const ratio = outputSampleRate / inputSampleRate;
-                        const outputLength = Math.round(input.length * ratio);
-                        const output = new Float32Array(outputLength);
-                        
-                        for (let i = 0; i < outputLength; i++) {
-                            const srcIndex = Math.round(i / ratio);
-                            output[i] = input[srcIndex] || 0;
-                        }
-                        
-                        return output;
                     }
                 `;
             }
             
             formatBytes(bytes) {
-                if (bytes === 0) return '0 Bytes';
+                if (bytes === 0) return '0 B';
                 const k = 1024;
-                const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+                const sizes = ['B', 'KB', 'MB', 'GB'];
                 const i = Math.floor(Math.log(bytes) / Math.log(k));
-                return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + sizes[i];
             }
             
             clearAll() {
+                this.isProcessing = false;
                 this.files = [];
                 this.compressedBlobs = [];
                 this.originalBlobs = [];
+                this.fileProgress = {};
                 document.getElementById('progressContainer').innerHTML = '';
                 document.getElementById('progressContainer').style.display = 'none';
                 document.getElementById('overallProgress').classList.add('hidden');
                 document.getElementById('downloadSection').style.display = 'none';
-                document.getElementById('processBtn').textContent = '🚀 Compress Files';
+                document.getElementById('processBtn').innerHTML = '🚀 Start Compression';
                 document.getElementById('processBtn').disabled = true;
+                document.getElementById('overallTitle').textContent = 'Processing...';
+                
                 if (this.worker) {
                     this.worker.terminate();
                     this.worker = null;
@@ -545,16 +665,9 @@
             }
         }
         
-        // Initialize when DOM is loaded
+        // Initialize
         document.addEventListener('DOMContentLoaded', () => {
             new MP3Compressor();
-        });
-        
-        // Handle visibility change for tab switching
-        document.addEventListener('visibilitychange', () => {
-            if (document.hidden) {
-                // Worker continues running in background
-            }
         });
     </script>
 </body>
