@@ -1,156 +1,332 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MP3 Auto Compressor</title>
-<script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.6/dist/ffmpeg.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-<style>
-body {
-  margin: 0;
-  font-family: system-ui, sans-serif;
-  background: linear-gradient(135deg,#ff00cc,#3333ff,#00ffd5);
-  color: #fff;
-  min-height: 100vh;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  padding-top: 30px;
-}
-.container {
-  width: 100%;
-  max-width: 420px;
-  padding: 16px;
-  text-align: center;
-}
-input, button {
-  width: 100%;
-  padding: 14px;
-  margin-top: 12px;
-  border-radius: 10px;
-  border: none;
-  font-size: 16px;
-}
-button {
-  background: #00ffd5;
-  color: #000;
-  font-weight: 700;
-}
-button:disabled {
-  opacity: 0.4;
-}
-.progress {
-  margin-top: 12px;
-  height: 10px;
-  background: #000;
-  border-radius: 8px;
-  overflow: hidden;
-}
-.progress div {
-  height: 100%;
-  width: 0%;
-  background: #00ffd5;
-}
-.list {
-  font-size: 14px;
-  margin-top: 12px;
-  word-break: break-word;
-}
-.credit {
-  text-align: center;
-  margin-top: 30px;
-  font-family: cursive;
-  opacity: 0.85;
-}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Free MP3 Compressor</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            min-height: 100vh;
+            margin: 0;
+            padding: 10px;
+            color: white;
+            overflow-x: hidden;
+        }
+        .container {
+            max-width: 100%;
+            background: rgba(255,255,255,0.15);
+            padding: 20px;
+            border-radius: 20px;
+            backdrop-filter: blur(15px);
+        }
+        h1 {
+            text-align: center;
+            font-size: clamp(1.5rem, 5vw, 2.5rem);
+            margin-bottom: 20px;
+        }
+        #fileInput {
+            display: none;
+        }
+        .upload-area {
+            border: 3px dashed rgba(255,255,255,0.6);
+            border-radius: 15px;
+            padding: clamp(20px, 5vw, 40px);
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 20px;
+            font-size: clamp(14px, 4vw, 16px);
+        }
+        .upload-area:hover, .upload-area.active {
+            background: rgba(255,255,255,0.25);
+            border-color: white;
+        }
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        select, button {
+            background: rgba(255,255,255,0.9);
+            color: #333;
+            border: none;
+            padding: 12px 16px;
+            border-radius: 25px;
+            font-size: clamp(14px, 4vw, 16px);
+            cursor: pointer;
+            min-height: 48px;
+        }
+        select { flex: 1; min-width: 120px; }
+        button { background: #ff6b6b; color: white; flex-shrink: 0; }
+        button:hover:not(:disabled) { background: #ff5252; transform: scale(1.05); }
+        button:disabled { background: #666; cursor: not-allowed; transform: none; }
+        #fileList {
+            list-style: none;
+            padding: 0;
+            max-height: 40vh;
+            overflow-y: auto;
+        }
+        .file-item {
+            background: rgba(255,255,255,0.2);
+            margin: 8px 0;
+            padding: 15px;
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            font-size: 14px;
+        }
+        .file-info { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; }
+        .progress-container { position: relative; }
+        .progress {
+            width: 100%;
+            height: 8px;
+            background: rgba(255,255,255,0.3);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #4CAF50, #8BC34A);
+            width: 0%;
+            transition: width 0.4s ease;
+        }
+        .stats {
+            background: rgba(0,0,0,0.3);
+            padding: 15px;
+            border-radius: 12px;
+            margin-top: 20px;
+            font-size: 16px;
+            display: none;
+        }
+        .stat-row { display: flex; justify-content: space-between; margin: 5px 0; }
+        .credit {
+            text-align: center;
+            font-family: 'Brush Script MT', cursive;
+            font-size: clamp(18px, 6vw, 28px);
+            margin-top: 30px;
+            opacity: 0.9;
+        }
+        @media (max-width: 480px) {
+            body { padding: 5px; }
+            .container { padding: 15px; }
+            .controls { flex-direction: column; align-items: stretch; }
+            select, button { width: 100%; }
+        }
+    </style>
 </head>
 <body>
-<div class="container">
-  <h2>MP3 Auto Compressor</h2>
-  <input id="fileInput" type="file" accept=".mp3,audio/mpeg,audio/*" multiple>
-  <div class="progress"><div id="bar"></div></div>
-  <div id="status" class="list"></div>
-  <button id="downloadAll" disabled>Download Files</button>
-  <button id="downloadZip" disabled>Download All as ZIP</button>
-  <div class="credit">Created by Animesh</div>
-</div>
+    <div class="container">
+        <h1>🎸 Free MP3 Compressor</h1>
+        <div class="upload-area" id="uploadArea">
+            <p>📱 Drag MP3s or tap to select (up to 15)</p>
+        </div>
+        <input type="file" id="fileInput" multiple accept="audio/mp3,audio/mpeg" />
+        <div class="controls">
+            <select id="bitrateSelect">
+                <option value="32">32 kbps (Max Compress)</option>
+                <option value="48">48 kbps</option>
+                <option value="64" selected>64 kbps (Balanced)</option>
+                <option value="80">80 kbps</option>
+                <option value="96">96 kbps</option>
+                <option value="128">128 kbps (Min Compress)</option>
+            </select>
+            <button id="compressBtn" onclick="compressAll()" disabled>Compress All</button>
+        </div>
+        <ul id="fileList"></ul>
+        <div id="overallProgress" style="display:none; margin:20px 0;">
+            <div style="text-align:center; font-size:18px;">Overall: <span id="overallPercent">0%</span></div>
+            <div class="progress"><div id="overallBar" class="progress-bar"></div></div>
+        </div>
+        <div id="stats" class="stats">
+            <div class="stat-row"><strong>Original Total:</strong> <span id="origTotal">0 MB</span></div>
+            <div class="stat-row"><strong>Compressed Total:</strong> <span id="compTotal">0 MB</span></div>
+            <div class="stat-row"><strong>Reduction:</strong> <span id="reduction">0%</span></div>
+        </div>
+        <div style="text-align:center;">
+            <button id="downloadZipBtn" onclick="downloadZip()" disabled style="display:none;">📦 Download ZIP</button>
+            <button id="downloadAllOrigBtn" onclick="downloadAllOriginal()" disabled>📥 All Originals</button>
+        </div>
+        <div class="credit">Created by Animesh</div>
+    </div>
 
-<script>
-const { createFFmpeg, fetchFile } = FFmpeg;
-const ffmpeg = createFFmpeg({ log: true });
-let outputs = [];
-let ffmpegLoaded = false;
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const uploadArea = document.getElementById('uploadArea');
+        const fileListEl = document.getElementById('fileList');
+        const compressBtn = document.getElementById('compressBtn');
+        const downloadZipBtn = document.getElementById('downloadZipBtn');
+        const downloadAllOrigBtn = document.getElementById('downloadAllOrigBtn');
+        const overallProgressDiv = document.getElementById('overallProgress');
+        const statsEl = document.getElementById('stats');
+        const bitrateSelect = document.getElementById('bitrateSelect');
 
-async function loadFFmpeg() {
-  if (!ffmpegLoaded) {
-    await ffmpeg.load();
-    ffmpegLoaded = true;
-  }
-}
+        let files = [];
+        let compressedBlobs = [];
+        let originalSizes = 0;
+        let compressedSizes = 0;
 
-fileInput.onchange = async () => {
-  const files = [...fileInput.files];
-  if (!files.length) return;
+        fileInput.addEventListener('change', handleFiles);
+        uploadArea.addEventListener('click', () => fileInput.click());
+        uploadArea.addEventListener('dragover', e => {
+            e.preventDefault();
+            uploadArea.classList.add('active');
+        });
+        uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('active'));
+        uploadArea.addEventListener('drop', e => {
+            e.preventDefault();
+            uploadArea.classList.remove('active');
+            fileInput.files = e.dataTransfer.files;
+            handleFiles();
+        });
 
-  outputs = [];
-  status.innerHTML = '';
-  bar.style.width = '0%';
-  downloadAll.disabled = true;
-  downloadZip.disabled = true;
+        function handleFiles() {
+            files = Array.from(fileInput.files).filter(f => f.type.startsWith('audio/mpeg'));
+            if (files.length > 15) {
+                alert('Max 15 files for smooth mobile performance.');
+                files = files.slice(0, 15);
+            }
+            originalSizes = files.reduce((sum, f) => sum + f.size, 0);
+            renderFileList();
+            updateButtons();
+            compressedBlobs = [];
+            downloadZipBtn.style.display = 'none';
+            downloadZipBtn.disabled = true;
+            statsEl.style.display = 'none';
+        }
 
-  await loadFFmpeg();
+        function renderFileList() {
+            fileListEl.innerHTML = '';
+            files.forEach((file, index) => {
+                const li = document.createElement('li');
+                li.className = 'file-item';
+                li.innerHTML = `
+                    <div class="file-info">
+                        <span>${file.name}</span>
+                        <span>${(file.size / 1024 / 1024).toFixed(1)} MB</span>
+                    </div>
+                    <div class="progress-container">
+                        <div class="progress"><div class="progress-bar" data-index="${index}"></div></div>
+                        <small style="text-align:center;">0%</small>
+                    </div>
+                `;
+                fileListEl.appendChild(li);
+            });
+        }
 
-  let index = 0;
-  for (const file of files) {
-    const inputName = file.name;
-    const outputName = 'ANI_' + inputName;
+        function updateButtons() {
+            const hasFiles = files.length > 0;
+            compressBtn.disabled = !hasFiles;
+            downloadAllOrigBtn.disabled = !hasFiles;
+        }
 
-    status.innerHTML += `Loading ${inputName}…<br>`;
-    await ffmpeg.FS('writeFile', inputName, await fetchFile(file));
+        async function compressAll() {
+            compressedBlobs = [];
+            compressedSizes = 0;
+            overallProgressDiv.style.display = 'block';
+            statsEl.style.display = 'none';
+            downloadZipBtn.style.display = 'none';
+            downloadZipBtn.disabled = true;
+            compressBtn.disabled = true;
+            compressBtn.textContent = 'Compressing...';
 
-    status.innerHTML += `Compressing ${inputName}…<br>`;
+            const bitrate = parseInt(bitrateSelect.value);
+            let completed = 0;
+            const total = files.length;
 
-    await ffmpeg.run('-i', inputName, '-b:a', '120k', outputName);
-    const data = ffmpeg.FS('readFile', outputName);
+            for (let i = 0; i < total; i++) {
+                await compressFile(files[i], i, bitrate);
+                completed++;
+                const percent = (completed / total) * 100;
+                updateOverallProgress(percent);
+            }
 
-    outputs.push({
-      name: outputName,
-      blob: new Blob([data.buffer], { type: 'audio/mpeg' }),
-      before: file.size,
-      after: data.buffer.byteLength
-    });
+            updateStats();
+            downloadZipBtn.style.display = 'inline-block';
+            downloadZipBtn.disabled = false;
+            compressBtn.disabled = false;
+            compressBtn.textContent = 'Compress Again';
+        }
 
-    index++;
-    bar.style.width = Math.round((index / files.length) * 100) + '%';
-    status.innerHTML += `${inputName}: ${(file.size/1024/1024).toFixed(2)}MB → ${(data.buffer.byteLength/1024/1024).toFixed(2)}MB<br><br>`;
-  }
+        async function compressFile(file, index, bitrate) {
+            const arrayBuffer = await file.arrayBuffer();
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+            const samples = audioBuffer.getChannelData(0); // Mono for simplicity
+            const samplesInt16 = new Int16Array(samples.length);
+            for (let j = 0; j < samples.length; j++) {
+                samplesInt16[j] = Math.max(-32768, Math.min(32767, samples[j] * 32767));
+            }
 
-  downloadAll.disabled = false;
-  downloadZip.disabled = outputs.length < 2;
-  status.innerHTML += '<b>Compression complete ✅</b>';
-};
+            const mp3encoder = new lamejs.Mp3Encoder(1, audioContext.sampleRate, bitrate);
+            const sampleBlockSize = 1152;
+            const mp3Data = [];
 
-// Download individual files
-downloadAll.onclick = () => {
-  outputs.forEach(o => {
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(o.blob);
-    a.download = o.name;
-    a.click();
-  });
-};
+            for (let i = 0; i < samplesInt16.length; i += sampleBlockSize) {
+                const sampleChunk = samplesInt16.subarray(i, i + sampleBlockSize);
+                const mp3buf = mp3encoder.encodeBuffer(sampleChunk);
+                if (mp3buf.length > 0) mp3Data.push(mp3buf);
+            }
+            const mp3buf = mp3encoder.flush();
+            if (mp3buf.length > 0) mp3Data.push(mp3buf);
 
-// Download all as ZIP
-downloadZip.onclick = async () => {
-  const zip = new JSZip();
-  outputs.forEach(o => zip.file(o.name, o.blob));
-  const blob = await zip.generateAsync({ type: 'blob' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'compressed_mp3s.zip';
-  a.click();
-};
-</script>
+            const blob = new Blob(mp3Data, { type: 'audio/mp3' });
+            compressedBlobs[index] = blob;
+            compressedSizes += blob.size;
+
+            // Update file progress
+            const bar = document.querySelector(`.progress-bar[data-index="${index}"]`);
+            const text = bar.parentElement.nextElementSibling;
+            bar.style.width = '100%';
+            const fileMB = (blob.size / 1024 / 1024).toFixed(1);
+            text.textContent = `${fileMB} MB (100%)`;
+        }
+
+        function updateOverallProgress(percent) {
+            document.getElementById('overallPercent').textContent = Math.round(percent) + '%';
+            document.getElementById('overallBar').style.width = percent + '%';
+        }
+
+        function updateStats() {
+            const origMB = (originalSizes / 1024 / 1024).toFixed(1);
+            const compMB = (compressedSizes / 1024 / 1024).toFixed(1);
+            const percent = Math.round(((originalSizes - compressedSizes) / originalSizes) * 100);
+            document.getElementById('origTotal').textContent = `${origMB} MB`;
+            document.getElementById('compTotal').textContent = `${compMB} MB`;
+            document.getElementById('reduction').textContent = `${percent}%`;
+            statsEl.style.display = 'block';
+        }
+
+        async function downloadZip() {
+            const zip = new JSZip();
+            compressedBlobs.forEach((blob, i) => {
+                if (blob) zip.file(files[i].name, blob);
+            });
+            const zipBlob = await zip.generateAsync({ type: 'blob' });
+            saveAs(zipBlob, `compressed_${bitrateSelect.value}kbps.zip`);
+        }
+
+        function downloadAllOriginal() {
+            files.forEach(file => {
+                const url = URL.createObjectURL(file);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = file.name;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            });
+        }
+    </script>
 </body>
 </html>
